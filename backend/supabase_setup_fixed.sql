@@ -48,6 +48,7 @@ CREATE TABLE IF NOT EXISTS pickup_requests (
     special_instructions TEXT,
     status VARCHAR(50) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected', 'completed')),
     courier_id UUID,
+    admin_notes TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );

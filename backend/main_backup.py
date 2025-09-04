@@ -9,7 +9,6 @@ import jwt as PyJWT
 from datetime import datetime, timedelta
 from pydantic import BaseModel
 import httpx
-import uuid
 
 # Load environment variables with override to ensure fresh values
 load_dotenv(override=True)
@@ -135,10 +134,16 @@ class PickupRequestUpdate(BaseModel):
     admin_notes: Optional[str] = None
     courier_id: Optional[str] = None
 
-class PickupRequestReject(BaseModel):
-    admin_notes: str
-
 # Admin authentication helper
+def verify_admin(token: dict = Depends(verify_token)):
+    """Verify admin role"""
+    user_role = token.get("role")
+    if user_role != "admin":
+        raise HTTPException(
+            status_code=403,
+            detail="Admin access required"
+        )
+    return token
 # Authentication functions
 def create_access_token(data: dict):
     to_encode = data.copy()
@@ -184,7 +189,7 @@ async def supabase_request(endpoint: str, method: str = "GET", data: dict = None
     if headers:
         default_headers.update(headers)
     
-    async with httpx.AsyncClient(timeout=10.0) as client:
+    async with httpx.AsyncClient() as client:
         try:
             if method == "GET":
                 response = await client.get(url, headers=default_headers)
@@ -192,8 +197,6 @@ async def supabase_request(endpoint: str, method: str = "GET", data: dict = None
                 response = await client.post(url, headers=default_headers, json=data)
             elif method == "PUT":
                 response = await client.put(url, headers=default_headers, json=data)
-            elif method == "PATCH":
-                response = await client.patch(url, headers=default_headers, json=data)
             elif method == "DELETE":
                 response = await client.delete(url, headers=default_headers)
             else:
@@ -244,9 +247,8 @@ async def register(user_data: UserCreate):
                 detail="User with this email already exists"
             )
         
-        # Create user profile (password is handled by Supabase Auth)
+        # Create user profile
         profile_data = {
-            "id": user_id,
             "email": user_data.email,
             "business_name": user_data.business_name,
             "full_name": user_data.full_name,
@@ -258,35 +260,29 @@ async def register(user_data: UserCreate):
             "updated_at": datetime.utcnow().isoformat()
         }
         
-        # Insert profile into Supabase with proper headers
+        # Insert profile into Supabase
         result = await supabase_request(
             "profiles",
             "POST",
-            profile_data,
-            headers={"Prefer": "return=representation"}
+            profile_data
         )
         
-        # For POST operations, Supabase returns empty response on success
-        # We need to generate a UUID for the response
-        import uuid
-        user_id = str(uuid.uuid4())
+        if not result:
+            raise HTTPException(status_code=500, detail="Failed to create user profile")
         
         # Create access token
         token_data = {
-            "sub": user_id,
+            "sub": result.get("id"),
             "email": user_data.email,
             "role": user_data.role
         }
         access_token = create_access_token(token_data)
         
-        # Return the created profile with token
-        response_data = {
+        return {
             **profile_data,
-            "id": user_id,
+            "id": result.get("id"),
             "access_token": access_token
         }
-        
-        return response_data
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -912,7 +908,7 @@ async def search_parcels(
 # ================ ADMIN ROUTES ================
 
 @app.get("/admin/dashboard")
-async def get_admin_dashboard(token: dict = Depends(verify_token)):
+async def get_admin_dashboard(token: dict = Depends(verify_admin)):
     """Get admin dashboard overview"""
     try:
         # Get all data for dashboard
@@ -932,7 +928,6 @@ async def get_admin_dashboard(token: dict = Depends(verify_token)):
             "total_pickup_requests": len(pickup_requests) if pickup_requests else 0,
             "pending_pickup_requests": len([r for r in (pickup_requests or []) if r.get("status") == "pending"]),
             "approved_pickup_requests": len([r for r in (pickup_requests or []) if r.get("status") == "approved"]),
-            "rejected_pickup_requests": len([r for r in (pickup_requests or []) if r.get("status") == "rejected"]),
             "active_couriers": len([c for c in (couriers or []) if c.get("status") == "active"]) if couriers else 0,
         }
         
@@ -942,55 +937,31 @@ async def get_admin_dashboard(token: dict = Depends(verify_token)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/admin/users")
-async def get_all_users(token: dict = Depends(verify_token)):
+async def get_all_users(token: dict = Depends(verify_admin)):
     """Get all users"""
     try:
-        # Check admin role
-        user_role = token.get("role")
-        if user_role != "admin":
-            raise HTTPException(
-                status_code=403,
-                detail="Admin access required"
-            )
-        
         users = await supabase_request("profiles", "GET")
         return users or []
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/admin/pickup-requests/pending")
-async def get_pending_pickup_requests(token: dict = Depends(verify_token)):
+async def get_pending_pickup_requests(token: dict = Depends(verify_admin)):
     """Get all pending pickup requests"""
     try:
-        # Check admin role
-        user_role = token.get("role")
-        if user_role != "admin":
-            raise HTTPException(
-                status_code=403,
-                detail="Admin access required"
-            )
-        
         requests = await supabase_request("pickup_requests?status=eq.pending", "GET")
         return requests or []
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.patch("/admin/pickup-requests/{request_id}/approve")
+@app.put("/admin/pickup-requests/{request_id}/approve")
 async def approve_pickup_request(
     request_id: str,
     approval_data: PickupRequestUpdate,
-    token: dict = Depends(verify_token)
+    token: dict = Depends(verify_admin)
 ):
     """Approve pickup request"""
     try:
-        # Check admin role
-        user_role = token.get("role")
-        if user_role != "admin":
-            raise HTTPException(
-                status_code=403,
-                detail="Admin access required"
-            )
-        
         update_data = {
             "status": "approved",
             "admin_notes": approval_data.admin_notes,
@@ -1000,7 +971,7 @@ async def approve_pickup_request(
         
         result = await supabase_request(
             f"pickup_requests?id=eq.{request_id}",
-            "PATCH",
+            "PUT",
             update_data
         )
         
@@ -1009,31 +980,23 @@ async def approve_pickup_request(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.patch("/admin/pickup-requests/{request_id}/reject")
+@app.put("/admin/pickup-requests/{request_id}/reject")
 async def reject_pickup_request(
     request_id: str,
-    reject_data: PickupRequestReject,
-    token: dict = Depends(verify_token)
+    admin_notes: str,
+    token: dict = Depends(verify_admin)
 ):
     """Reject pickup request"""
     try:
-        # Check admin role
-        user_role = token.get("role")
-        if user_role != "admin":
-            raise HTTPException(
-                status_code=403,
-                detail="Admin access required"
-            )
-        
         update_data = {
             "status": "rejected",
-            "admin_notes": reject_data.admin_notes,
+            "admin_notes": admin_notes,
             "updated_at": datetime.utcnow().isoformat()
         }
         
         result = await supabase_request(
             f"pickup_requests?id=eq.{request_id}",
-            "PATCH",
+            "PUT",
             update_data
         )
         
@@ -1043,17 +1006,9 @@ async def reject_pickup_request(
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/admin/couriers")
-async def get_couriers(token: dict = Depends(verify_token)):
+async def get_couriers(token: dict = Depends(verify_admin)):
     """Get all couriers"""
     try:
-        # Check admin role
-        user_role = token.get("role")
-        if user_role != "admin":
-            raise HTTPException(
-                status_code=403,
-                detail="Admin access required"
-            )
-        
         couriers = await supabase_request("couriers", "GET")
         return couriers or []
     except Exception as e:
@@ -1062,18 +1017,10 @@ async def get_couriers(token: dict = Depends(verify_token)):
 @app.post("/admin/couriers")
 async def create_courier(
     courier_data: CourierCreate,
-    token: dict = Depends(verify_token)
+    token: dict = Depends(verify_admin)
 ):
     """Create new courier"""
     try:
-        # Check admin role
-        user_role = token.get("role")
-        if user_role != "admin":
-            raise HTTPException(
-                status_code=403,
-                detail="Admin access required"
-            )
-        
         courier_dict = courier_data.dict()
         courier_dict.update({
             "status": "active",
@@ -1095,18 +1042,10 @@ async def create_courier(
 async def assign_parcel_to_courier(
     parcel_id: str,
     courier_id: str,
-    token: dict = Depends(verify_token)
+    token: dict = Depends(verify_admin)
 ):
     """Assign parcel to courier"""
     try:
-        # Check admin role
-        user_role = token.get("role")
-        if user_role != "admin":
-            raise HTTPException(
-                status_code=403,
-                detail="Admin access required"
-            )
-        
         # Update parcel status
         parcel_update = {
             "status": "assigned",

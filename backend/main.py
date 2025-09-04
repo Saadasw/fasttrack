@@ -9,6 +9,7 @@ import jwt as PyJWT
 from datetime import datetime, timedelta
 from pydantic import BaseModel
 import httpx
+import uuid
 
 # Load environment variables with override to ensure fresh values
 load_dotenv(override=True)
@@ -170,7 +171,19 @@ async def supabase_request(endpoint: str, method: str = "GET", data: dict = None
             if response.status_code >= 400:
                 raise HTTPException(status_code=response.status_code, detail=f"Supabase error: {response.text}")
             
-            return response.json()
+            # Handle empty response
+            if not response.text.strip():
+                print(f"Warning: Empty response from Supabase {method} {endpoint}")
+                return None
+            
+            try:
+                return response.json()
+            except ValueError as json_error:
+                print(f"JSON parse error: {json_error}, Response text: '{response.text}'")
+                # For successful POST requests with empty body, return success indicator
+                if method == "POST" and response.status_code == 201:
+                    return {"success": True}
+                return None
         except Exception as e:
             print(f"Supabase request error: {str(e)}")
             raise HTTPException(status_code=500, detail=f"Supabase request failed: {str(e)}")
@@ -200,8 +213,10 @@ async def register(user_data: UserCreate):
                 detail="User with this email already exists"
             )
         
-        # Create user profile
+        # Create user profile with UUID
+        user_id = str(uuid.uuid4())
         profile_data = {
+            "id": user_id,
             "email": user_data.email,
             "business_name": user_data.business_name,
             "full_name": user_data.full_name,
@@ -213,29 +228,29 @@ async def register(user_data: UserCreate):
             "updated_at": datetime.utcnow().isoformat()
         }
         
-        # Insert profile into Supabase
+        # Insert profile into Supabase with proper headers
         result = await supabase_request(
             "profiles",
             "POST",
-            profile_data
+            profile_data,
+            headers={"Prefer": "return=representation"}
         )
-        
-        if not result:
-            raise HTTPException(status_code=500, detail="Failed to create user profile")
         
         # Create access token
         token_data = {
-            "sub": result.get("id"),
+            "sub": user_id,
             "email": user_data.email,
             "role": user_data.role
         }
         access_token = create_access_token(token_data)
         
-        return {
+        # Return the created profile with token
+        response_data = {
             **profile_data,
-            "id": result.get("id"),
             "access_token": access_token
         }
+        
+        return response_data
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

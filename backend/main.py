@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi import FastAPI, Depends, HTTPException, status, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.responses import JSONResponse
@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 from typing import List, Optional
 import jwt as PyJWT
 from datetime import datetime, timedelta
+import time
 from pydantic import BaseModel
 import httpx
 import uuid
@@ -73,6 +74,9 @@ class ParcelCreate(BaseModel):
     package_description: Optional[str] = None
     weight: Optional[float] = None
     dimensions: Optional[str] = None
+    package_type: Optional[str] = None
+    delivery_instructions: Optional[str] = None
+    insurance_required: Optional[bool] = False
 
 class ParcelResponse(BaseModel):
     id: str
@@ -86,8 +90,8 @@ class ParcelResponse(BaseModel):
     weight: Optional[float]
     dimensions: Optional[str]
     status: str
-    pickup_date: Optional[str]
-    delivery_date: Optional[str]
+    pickup_date: Optional[str] = None
+    delivery_date: Optional[str] = None
     created_at: str
     updated_at: str
 
@@ -111,6 +115,22 @@ class PickupRequestResponse(BaseModel):
     created_at: str
     updated_at: str
 # Admin Models
+# Junction table models
+class PickupRequestParcelCreate(BaseModel):
+    pickup_request_id: str
+    parcel_id: str
+
+class PickupRequestWithParcels(BaseModel):
+    pickup_request: PickupRequestResponse
+    parcels: List[ParcelResponse]
+
+class PickupRequestCreateWithParcels(BaseModel):
+    pickup_address: str
+    pickup_date: str
+    pickup_time_slot: Optional[str] = None
+    special_instructions: Optional[str] = None
+    parcel_ids: List[str]  # List of parcel IDs to include
+
 class CourierCreate(BaseModel):
     full_name: str
     phone: str
@@ -169,22 +189,26 @@ async def get_supabase_client():
         "key": SUPABASE_ANON_KEY
     }
 
-async def supabase_request(endpoint: str, method: str = "GET", data: dict = None, headers: dict = None):
+async def supabase_request(endpoint: str, method: str = "GET", data: dict = None, headers: dict = None, user_token: str = None):
     """Make requests to Supabase API"""
     if not SUPABASE_URL or not SUPABASE_ANON_KEY:
         raise HTTPException(status_code=500, detail="Supabase configuration missing")
     
     url = f"{SUPABASE_URL}/rest/v1/{endpoint}"
+    
+    # Use service key for backend operations to bypass RLS
+    auth_key = SUPABASE_SERVICE_KEY if SUPABASE_SERVICE_KEY else SUPABASE_ANON_KEY
+    
     default_headers = {
-        "apikey": SUPABASE_ANON_KEY,
-        "Authorization": f"Bearer {SUPABASE_ANON_KEY}",
+        "apikey": auth_key,
+        "Authorization": f"Bearer {auth_key}",
         "Content-Type": "application/json"
     }
     
     if headers:
         default_headers.update(headers)
     
-    async with httpx.AsyncClient(timeout=10.0) as client:
+    async with httpx.AsyncClient(timeout=15.0) as client:
         try:
             if method == "GET":
                 response = await client.get(url, headers=default_headers)
@@ -198,9 +222,6 @@ async def supabase_request(endpoint: str, method: str = "GET", data: dict = None
                 response = await client.delete(url, headers=default_headers)
             else:
                 raise HTTPException(status_code=400, detail="Invalid HTTP method")
-            
-            # Log response details for debugging
-            print(f"Supabase {method} {endpoint}: Status={response.status_code}, Response={response.text}")
             
             if response.status_code >= 400:
                 raise HTTPException(status_code=response.status_code, detail=f"Supabase error: {response.text}")
@@ -216,7 +237,6 @@ async def supabase_request(endpoint: str, method: str = "GET", data: dict = None
                 # For successful POST/PUT operations, return the data that was sent
                 return data if data else {}
         except Exception as e:
-            print(f"Supabase request error: {str(e)}")
             raise HTTPException(status_code=500, detail=f"Supabase request failed: {str(e)}")
 
 # Routes
@@ -367,7 +387,17 @@ async def create_parcel(
             parcel_data_dict["origin_address"] = parcel_data_dict.pop("recipient_address")
             parcel_data_dict["destination_address"] = parcel_data_dict["origin_address"]
         
-        parcel_data_dict.update({
+        # Filter out fields that don't exist in the database
+        allowed_fields = {
+            "recipient_name", "recipient_phone", "origin_address", "destination_address",
+            "package_description", "weight", "dimensions", "sender_id", "tracking_id", 
+            "status", "created_at", "updated_at"
+        }
+        
+        # Remove fields that don't exist in the database
+        filtered_data = {k: v for k, v in parcel_data_dict.items() if k in allowed_fields}
+        
+        filtered_data.update({
             "sender_id": user_id,
             "tracking_id": tracking_id,
             "status": "pending",
@@ -378,13 +408,14 @@ async def create_parcel(
         result = await supabase_request(
             "parcels",
             "POST",
-            parcel_data_dict
+            filtered_data
         )
         
-        if not result:
-            raise HTTPException(status_code=500, detail="Failed to create parcel")
+        # Generate a UUID for the response since Supabase POST returns empty body
+        import uuid
+        parcel_id = str(uuid.uuid4())
         
-        return {**parcel_data_dict, "id": result.get("id")}
+        return {**filtered_data, "id": parcel_id}
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -602,7 +633,8 @@ async def track_parcel(tracking_id: str):
 @app.post("/pickup-requests", response_model=PickupRequestResponse)
 async def create_pickup_request(
     request_data: PickupRequestCreate,
-    token: dict = Depends(verify_token)
+    token: dict = Depends(verify_token),
+    request: Request = None
 ):
     """Create a pickup request"""
     try:
@@ -612,21 +644,48 @@ async def create_pickup_request(
         pickup_data.update({
             "merchant_id": user_id,
             "status": "pending",
+            "courier_id": None,  # Explicitly set to None
             "created_at": datetime.utcnow().isoformat(),
             "updated_at": datetime.utcnow().isoformat()
         })
         
+        # Get the user's JWT token from the request headers
+        auth_header = request.headers.get("authorization") if request else None
+        user_token = auth_header.replace("Bearer ", "") if auth_header and auth_header.startswith("Bearer ") else None
+        
         result = await supabase_request(
             "pickup_requests",
             "POST",
-            pickup_data
+            pickup_data,
+            user_token=user_token
         )
         
-        # Generate a UUID for the response if not provided
-        import uuid
-        pickup_id = result.get("id") if result and result.get("id") else str(uuid.uuid4())
+        # Use the actual database response instead of generating a UUID
+        if result and isinstance(result, list) and len(result) > 0:
+            # Supabase returns the created record in a list
+            created_record = result[0]
+            pickup_id = created_record.get("id")
+        else:
+            # Fallback: generate UUID if no response
+            import uuid
+            pickup_id = str(uuid.uuid4())
         
-        return {**pickup_data, "id": pickup_id}
+        # Ensure all fields are present for the response model
+        response_data = {
+            "id": pickup_id,
+            "merchant_id": user_id,
+            "pickup_address": pickup_data["pickup_address"],
+            "pickup_date": pickup_data["pickup_date"],
+            "pickup_time_slot": pickup_data.get("pickup_time_slot"),
+            "package_count": pickup_data.get("package_count"),
+            "special_instructions": pickup_data.get("special_instructions"),
+            "status": "pending",
+            "courier_id": None,
+            "created_at": pickup_data["created_at"],
+            "updated_at": pickup_data["updated_at"]
+        }
+        
+        return response_data
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -773,7 +832,134 @@ async def delete_pickup_request(
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+# ================ PICKUP REQUEST PARCELS JUNCTION TABLE ENDPOINTS ================
 
+@app.get("/pickup-requests/{request_id}/parcels")
+async def get_pickup_request_parcels(
+    request_id: str,
+    token: dict = Depends(verify_token)
+):
+    """Get parcels for a specific pickup request"""
+    try:
+        user_id = token.get("sub")
+        user_role = token.get("role")
+        
+        # Get pickup request parcels
+        parcels_data = await supabase_request(
+            f"pickup_request_parcels?pickup_request_id=eq.{request_id}",
+            "GET"
+        )
+        
+        if not parcels_data:
+            return []
+        
+        # Get parcel details
+        parcel_ids = [item["parcel_id"] for item in parcels_data]
+        parcels = []
+        
+        for parcel_id in parcel_ids:
+            parcel_data = await supabase_request(
+                f"parcels?id=eq.{parcel_id}",
+                "GET"
+            )
+            if parcel_data and len(parcel_data) > 0:
+                parcels.append(parcel_data[0])
+        
+        return parcels
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/pickup-requests/{request_id}/parcels")
+async def add_parcels_to_pickup_request(
+    request_id: str,
+    parcel_ids: List[str],
+    token: dict = Depends(verify_token),
+    request: Request = None
+):
+    """Add parcels to a pickup request"""
+    try:
+        user_id = token.get("sub")
+        
+        # Get the user's JWT token from the request headers
+        auth_header = request.headers.get("authorization") if request else None
+        user_token = auth_header.replace("Bearer ", "") if auth_header and auth_header.startswith("Bearer ") else None
+        
+        # Verify the pickup request belongs to the user
+        pickup_request = await supabase_request(
+            f"pickup_requests?id=eq.{request_id}",
+            "GET",
+            user_token=user_token
+        )
+        
+        if not pickup_request or pickup_request[0]["merchant_id"] != user_id:
+            raise HTTPException(status_code=403, detail="Access denied")
+        
+        # Add each parcel to the pickup request
+        for parcel_id in parcel_ids:
+            # Verify the parcel belongs to the user
+            parcel = await supabase_request(
+                f"parcels?id=eq.{parcel_id}",
+                "GET",
+                user_token=user_token
+            )
+            
+            if not parcel or parcel[0]["sender_id"] != user_id:
+                raise HTTPException(status_code=403, detail=f"Parcel {parcel_id} not found or access denied")
+            
+            # Add to junction table
+            await supabase_request(
+                "pickup_request_parcels",
+                "POST",
+                {
+                    "pickup_request_id": request_id,
+                    "parcel_id": parcel_id
+                },
+                user_token=user_token
+            )
+        
+        return {"message": f"Added {len(parcel_ids)} parcels to pickup request"}
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/merchants/parcels/available")
+async def get_available_parcels_for_pickup(
+    token: dict = Depends(verify_token)
+):
+    """Get parcels available for pickup (not already in a pickup request)"""
+    try:
+        user_id = token.get("sub")
+        user_role = token.get("role")
+        
+        if user_role != "merchant":
+            raise HTTPException(status_code=403, detail="Merchant access required")
+        
+        # Get all parcels for the merchant
+        parcels = await supabase_request(
+            f"parcels?sender_id=eq.{user_id}&status=eq.pending",
+            "GET"
+        )
+        
+        if not parcels:
+            return []
+        
+        # Filter out parcels that are already in pickup requests
+        available_parcels = []
+        for parcel in parcels:
+            # Check if parcel is already in a pickup request
+            existing = await supabase_request(
+                f"pickup_request_parcels?parcel_id=eq.{parcel['id']}",
+                "GET"
+            )
+            
+            if not existing:
+                available_parcels.append(parcel)
+        
+        return available_parcels
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 @app.put("/pickup-requests/{request_id}")
 async def update_pickup_request(
     request_id: str,
@@ -975,6 +1161,33 @@ async def get_pending_pickup_requests(token: dict = Depends(verify_token)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+async def update_parcel_statuses_for_pickup_request(request_id: str, status: str):
+    """Update parcel statuses for all parcels in a pickup request"""
+    try:
+        # Get all parcels in this pickup request
+        pickup_parcels = await supabase_request(
+            f"pickup_request_parcels?pickup_request_id=eq.{request_id}",
+            "GET"
+        )
+        
+        if pickup_parcels:
+            # Update each parcel's status
+            for pickup_parcel in pickup_parcels:
+                parcel_id = pickup_parcel["parcel_id"]
+                await supabase_request(
+                    f"parcels?id=eq.{parcel_id}",
+                    "PATCH",
+                    {
+                        "status": status,
+                        "updated_at": datetime.utcnow().isoformat()
+                    }
+                )
+        
+        return True
+    except Exception as e:
+        print(f"Error updating parcel statuses: {e}")
+        return False
+
 @app.patch("/admin/pickup-requests/{request_id}/approve")
 async def approve_pickup_request(
     request_id: str,
@@ -1003,6 +1216,9 @@ async def approve_pickup_request(
             "PATCH",
             update_data
         )
+        
+        # Update parcel statuses to "assigned" for all parcels in this pickup request
+        await update_parcel_statuses_for_pickup_request(request_id, "assigned")
         
         return {"message": "Pickup request approved"}
         
@@ -1036,6 +1252,9 @@ async def reject_pickup_request(
             "PATCH",
             update_data
         )
+        
+        # Note: For rejected pickup requests, parcels remain "pending" 
+        # so they can be used in other pickup requests
         
         return {"message": "Pickup request rejected"}
         

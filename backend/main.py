@@ -264,6 +264,9 @@ async def register(user_data: UserCreate):
                 detail="User with this email already exists"
             )
         
+        # Generate UUID for the new user
+        user_id = str(uuid.uuid4())
+        
         # Create user profile (password is handled by Supabase Auth)
         profile_data = {
             "id": user_id,
@@ -286,11 +289,6 @@ async def register(user_data: UserCreate):
             headers={"Prefer": "return=representation"}
         )
         
-        # For POST operations, Supabase returns empty response on success
-        # We need to generate a UUID for the response
-        import uuid
-        user_id = str(uuid.uuid4())
-        
         # Create access token
         token_data = {
             "sub": user_id,
@@ -302,7 +300,6 @@ async def register(user_data: UserCreate):
         # Return the created profile with token
         response_data = {
             **profile_data,
-            "id": user_id,
             "access_token": access_token
         }
         

@@ -33,6 +33,8 @@ python -m venv venv
 # On Windows:
 venv\Scripts\activate
 # On macOS/Linux:
+source venv/Scripts/activate
+# Or,
 source venv/bin/activate
 
 # Install dependencies
@@ -85,6 +87,7 @@ Once the server is running, you can access:
 ## 🔐 **Authentication Flow**
 
 ### **Registration**
+
 ```http
 POST /auth/register
 Content-Type: application/json
@@ -101,6 +104,7 @@ Content-Type: application/json
 ```
 
 ### **Login**
+
 ```http
 POST /auth/login
 Content-Type: application/json
@@ -112,6 +116,7 @@ Content-Type: application/json
 ```
 
 ### **Protected Endpoints**
+
 ```http
 GET /auth/me
 Authorization: Bearer <your_jwt_token>
@@ -142,43 +147,51 @@ Authorization: Bearer <your_jwt_token>
 ## 🔒 **Security Features**
 
 ### **Row Level Security (RLS)**
+
 - Users can only access their own data
 - Admins have full access to all data
 - Role-based permissions enforced at database level
 
 ### **JWT Authentication**
+
 - Secure token-based authentication
 - Configurable token expiration
 - Automatic token validation
 
 ### **CORS Protection**
+
 - Configured for frontend integration
 - Secure cross-origin requests
 
 ## 📊 **API Endpoints**
 
 ### **Authentication**
+
 - `POST /auth/register` - User registration
 - `POST /auth/login` - User authentication
 - `GET /auth/me` - Get current user profile
 
 ### **Parcels**
+
 - `POST /parcels` - Create new parcel
 - `GET /parcels` - List user's parcels
 - `GET /parcels/{id}` - Get parcel details
 
 ### **Pickup Requests**
+
 - `POST /pickup-requests` - Create pickup request
 - `GET /pickup-requests` - List pickup requests
 - `PUT /pickup-requests/{id}` - Update request status
 
 ### **Admin Operations**
+
 - `GET /admin/stats` - Dashboard statistics
 - Full CRUD operations for all entities
 
 ## 🧪 **Testing**
 
 ### **Manual Testing**
+
 ```bash
 # Test health endpoint
 curl http://localhost:8000/health
@@ -190,6 +203,7 @@ curl -X POST http://localhost:8000/auth/register \
 ```
 
 ### **Automated Testing**
+
 ```bash
 # Install test dependencies
 pip install pytest pytest-asyncio httpx
@@ -203,11 +217,13 @@ pytest
 ### **Production Considerations**
 
 1. **Environment Variables**
+
    - Set `ENVIRONMENT=production`
    - Use strong `SECRET_KEY`
    - Configure production database URLs
 
 2. **Security**
+
    - Enable HTTPS
    - Configure proper CORS origins
    - Set up monitoring and logging
@@ -218,6 +234,7 @@ pytest
    - Configure proper timeouts
 
 ### **Docker Deployment**
+
 ```dockerfile
 FROM python:3.9-slim
 
@@ -235,26 +252,28 @@ CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
 
 ### **Environment Variables**
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `SUPABASE_URL` | Supabase project URL | Required |
-| `SUPABASE_ANON_KEY` | Supabase anonymous key | Required |
-| `SUPABASE_SERVICE_KEY` | Supabase service key | Required |
-| `SECRET_KEY` | JWT signing key | Generated |
-| `ACCESS_TOKEN_EXPIRE_MINUTES` | Token expiration time | 30 |
-| `FRONTEND_URL` | Frontend URL for CORS | http://localhost:3000 |
-| `HOST` | Server host | 0.0.0.0 |
-| `PORT` | Server port | 8000 |
+| Variable                      | Description            | Default               |
+| ----------------------------- | ---------------------- | --------------------- |
+| `SUPABASE_URL`                | Supabase project URL   | Required              |
+| `SUPABASE_ANON_KEY`           | Supabase anonymous key | Required              |
+| `SUPABASE_SERVICE_KEY`        | Supabase service key   | Required              |
+| `SECRET_KEY`                  | JWT signing key        | Generated             |
+| `ACCESS_TOKEN_EXPIRE_MINUTES` | Token expiration time  | 30                    |
+| `FRONTEND_URL`                | Frontend URL for CORS  | http://localhost:3000 |
+| `HOST`                        | Server host            | 0.0.0.0               |
+| `PORT`                        | Server port            | 8000                  |
 
 ## 📝 **Development Workflow**
 
 1. **Feature Development**
+
    - Create feature branch
    - Implement API endpoints
    - Add tests
    - Update documentation
 
 2. **Database Changes**
+
    - Update `supabase_setup.sql`
    - Test in development
    - Apply to production
@@ -269,11 +288,13 @@ CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
 ### **Common Issues**
 
 1. **Database Connection**
+
    - Verify Supabase credentials
    - Check network connectivity
    - Validate database schema
 
 2. **Authentication Errors**
+
    - Check JWT token expiration
    - Verify user permissions
    - Check RLS policies
@@ -308,6 +329,7 @@ This project is licensed under the MIT License.
 ## 🆘 **Support**
 
 For support and questions:
+
 - Create an issue in the repository
 - Contact the development team
 - Check the documentation

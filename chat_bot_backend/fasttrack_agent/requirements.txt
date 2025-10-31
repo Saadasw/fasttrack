@@ -1,0 +1,33 @@
+# FastAPI and Web Server
+fastapi
+uvicorn[standard]
+python-multipart
+aiofiles
+
+# Azure OpenAI
+openai
+azure-identity
+
+# Document Processing
+docling
+docling-core
+pypdf
+
+# Vector Store and Embeddings
+faiss-cpu
+numpy
+scikit-learn
+
+# Text Processing and Retrieval
+sentence-transformers
+rank-bm25
+tiktoken
+
+# Environment and Configuration
+python-dotenv
+pydantic
+pydantic-settings
+
+# Utilities
+tqdm
+requests

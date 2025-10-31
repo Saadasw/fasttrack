@@ -1,0 +1,59 @@
+# --- General ---
+.DS_Store
+Thumbs.db
+*.log
+logs/
+*.tmp
+*.swp
+*.swo
+
+# --- Node / Next.js (frontend) ---
+node_modules/
+.next/
+.next/cache/
+.next/static/
+out/
+*.tsbuildinfo
+fasttrack-frontend/node_modules/
+fasttrack-frontend/.next/
+fasttrack-frontend/.env.local
+fasttrack-frontend/.env*
+
+# --- Python (backend and chatbot) ---
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+.eggs/
+.python-version
+.env
+venv/
+venv*/
+backend/venv/
+chat_bot_backend/**/venv/
+
+# --- Build & Dist ---
+dist/
+build/
+coverage/
+.pytest_cache/
+.mypy_cache/
+.cache/
+
+# --- Editor / OS ---
+.vscode/
+.idea/
+*.iml
+
+# --- Project specific ---
+chat_bot_backend/fasttrack_agent/vector_store/
+chat_bot_backend/fasttrack_agent/uploads/
+backend/ngrok.zip
+
+# --- Environment files ---
+backend/env.txt
+chat_bot_backend/fasttrack_agent/.env
+.env.local
+.env.production
+.env.development

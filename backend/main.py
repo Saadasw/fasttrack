@@ -298,7 +298,10 @@ async def register(user_data: UserCreate):
         access_token = create_access_token(token_data)
         
         # Return the created profile with token
-        response_data = { **profile_data, "access_token": access_token }
+        response_data = {
+            **profile_data,
+            "access_token": access_token
+        }
         
         return response_data
         

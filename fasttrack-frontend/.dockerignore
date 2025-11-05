@@ -1,0 +1,70 @@
+# Dependencies
+node_modules
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Build output
+.next
+out
+dist
+build
+
+# Environment
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Misc
+.DS_Store
+*.pem
+.vscode
+.idea
+
+# Git
+.git
+.gitignore
+
+# Testing
+coverage
+.nyc_output
+
+# Debug
+*.log
+.npm
+.eslintcache
+
+# Documentation
+README.md
+*.md
+
+# OS
+Thumbs.db
+
+# Temp files
+*.swp
+*.swo
+*~
+
+# Vercel
+.vercel
+
+# TypeScript
+*.tsbuildinfo
+
+# Batch files
+*.bat
+*.exe.stackdump
+
+# Network setup files
+setup-network.bat
+setup-network.sh
+NETWORK-SETUP.md
+
+# Example files
+env.example
+env-test.js
+

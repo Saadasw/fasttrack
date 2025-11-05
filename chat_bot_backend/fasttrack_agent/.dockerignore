@@ -1,0 +1,39 @@
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info
+dist
+build
+venv
+env
+.env
+.venv
+*.log
+.git
+.gitignore
+.DS_Store
+*.md
+README.md
+.pytest_cache
+.coverage
+htmlcov
+*.swp
+*.swo
+*~
+.vscode
+.idea
+# Keep vector_store and kb folders structure but ignore their contents in .dockerignore
+# They will be mounted as volumes
+uploads/*
+# Exclude .txt files except requirements.txt
+*.txt
+!requirements.txt
+agent_type.md
+KB_LOADING_GUIDE.md
+rag_reuse.md
+setup.sh
+

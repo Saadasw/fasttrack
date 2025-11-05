@@ -1,4 +1,4 @@
-const CHATBOT_URL = process.env.NEXT_PUBLIC_CHATBOT_URL || 'http://127.0.0.1:8080'
+const CHATBOT_URL = process.env.NEXT_PUBLIC_CHATBOT_URL || 'http://localhost:8010'
 
 export type ChatbotResponse = {
   answer: string

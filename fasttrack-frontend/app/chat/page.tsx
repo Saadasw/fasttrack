@@ -14,7 +14,7 @@ export default function ChatPage() {
   const [error, setError] = useState<string | null>(null)
   const [stats, setStats] = useState<{ total_documents?: number; index_size?: number } | null>(null)
   const sessionId = useMemo(() => 'web-session', [])
-  const CHATBOT_URL = process.env.NEXT_PUBLIC_CHATBOT_URL || 'http://127.0.0.1:8080'
+  const CHATBOT_URL = process.env.NEXT_PUBLIC_CHATBOT_URL || 'http://localhost:8010'
 
   const send = async () => {
     if (!input.trim() || loading) return

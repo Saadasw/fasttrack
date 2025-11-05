@@ -41,6 +41,28 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
+
+
+# 1. Backend folder এ যান
+cd /Users/fahimarakil/Applications/fasttrack/backend
+
+# 2. Virtual environment তৈরি করুন (যদি এখনো না করে থাকেন)
+python3 -m venv venv
+
+# 3. Activate করুন (Mac)
+source venv/bin/activate
+
+# 4. Dependencies install করুন
+pip install -r requirements.txt
+
+# 5. Environment file setup করুন
+cp env.txt .env
+# এখন .env file edit করে আপনার Supabase credentials add করুন
+
+# 6. Server start করুন
+python start.py
+
+
 ### 2. **Environment Configuration**
 
 Copy the environment template and configure your Supabase credentials:

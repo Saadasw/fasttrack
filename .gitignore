@@ -54,8 +54,20 @@ chat_bot_backend/fasttrack_agent/uploads/
 backend/ngrok.zip
 
 # --- Environment files ---
-backend/env.txt
-chat_bot_backend/fasttrack_agent/.env
+# All .env files and backups (MUST NOT be committed)
+.env
+.env*
+*.env
+*.env.*
 .env.local
 .env.production
 .env.development
+.env.backup*
+backend/.env
+backend/.env*
+backend/env.txt
+chat_bot_backend/**/.env
+chat_bot_backend/**/.env*
+chat_bot_backend/**/.env.backup*
+fasttrack-frontend/.env
+fasttrack-frontend/.env*

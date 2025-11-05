@@ -32,6 +32,8 @@ venv/
 venv*/
 backend/venv/
 chat_bot_backend/**/venv/
+chat_bot_backend/fasttrack_agent/.env.backup
+
 
 # --- Build & Dist ---
 dist/

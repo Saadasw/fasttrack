@@ -22,9 +22,17 @@ app = FastAPI(
 )
 
 # CORS middleware
+# Get allowed origins from environment variable or use defaults
+allowed_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000").split(",")
+# Add production Vercel URL
+allowed_origins.extend([
+    "https://fasttrack-lyart.vercel.app",
+    "https://*.vercel.app"  # Allow all Vercel preview deployments
+])
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins for development
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

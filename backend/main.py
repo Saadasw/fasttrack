@@ -957,44 +957,6 @@ async def get_available_parcels_for_pickup(
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-@app.put("/pickup-requests/{request_id}")
-async def update_pickup_request(
-    request_id: str,
-    status: str,
-    admin_notes: Optional[str] = None,
-    token: dict = Depends(verify_token)
-):
-    """Update pickup request status (admin only)"""
-    try:
-        user_role = token.get("role")
-        
-        if user_role != "admin":
-            raise HTTPException(
-                status_code=403,
-                detail="Only admins can update pickup requests"
-            )
-        
-        update_data = {
-            "status": status,
-            "updated_at": datetime.utcnow().isoformat()
-        }
-        
-        if admin_notes:
-            update_data["admin_notes"] = admin_notes
-        
-        result = await supabase_request(
-            f"pickup_requests?id=eq.{request_id}",
-            "PUT",
-            update_data
-        )
-        
-        if not result:
-            raise HTTPException(status_code=500, detail="Failed to update pickup request")
-        
-        return {"message": "Pickup request updated successfully"}
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/admin/stats")
 async def get_admin_stats(token: dict = Depends(verify_token)):

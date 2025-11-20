@@ -15,7 +15,7 @@ export async function GET(
     }
 
     // Call the backend tracking endpoint
-    const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://192.168.31.124:8000'
+    const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
     const response = await fetch(`${backendUrl}/parcels/tracking/${trackingId}`)
     
     if (!response.ok) {

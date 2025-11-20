@@ -6,9 +6,10 @@ class ApiClient {
 
   constructor(
     baseUrl: string = process.env.NEXT_PUBLIC_API_URL ||
-      "http://192.168.31.78:8000"
+      "http://localhost:8000"
   ) {
-    this.baseUrl = baseUrl;
+    // Remove trailing slash from baseUrl to prevent double slashes
+    this.baseUrl = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
     // Only access localStorage in browser environment
     if (typeof window !== "undefined") {
       this.token = localStorage.getItem("token");

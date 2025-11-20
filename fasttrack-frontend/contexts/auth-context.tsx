@@ -41,7 +41,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Helper function to get API URL
   const getApiUrl = () =>
-    process.env.NEXT_PUBLIC_API_URL || "http://192.168.31.78:8000";
+    process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
   useEffect(() => {
     setMounted(true);

@@ -127,7 +127,7 @@ export function ParcelList({
         throw new Error("Not authenticated. Please login again.");
       }
 
-      const response = await fetch("http://192.168.31.124:8000/parcels", {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/parcels`, {
         headers: {
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
@@ -196,7 +196,7 @@ export function ParcelList({
         throw new Error("Not authenticated. Please login again.");
       }
       const response = await fetch(
-        `http://192.168.31.124:8000/parcels/${parcelId}`,
+        `${process.env.NEXT_PUBLIC_API_URL}/parcels/${parcelId}`,
         {
           method: "DELETE",
           headers: {

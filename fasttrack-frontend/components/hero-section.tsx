@@ -11,7 +11,7 @@ export function HeroSection() {
     setApiStatus("Testing...");
     try {
       const apiUrl =
-        process.env.NEXT_PUBLIC_API_URL || "http://192.168.31.78:8000";
+        process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
       const response = await fetch(`${apiUrl}/health`);
 
       if (response.ok) {

@@ -74,7 +74,7 @@ export function MerchantDashboard() {
         // Fetch parcels from backend
         console.log("🔍 Fetching parcels from backend...");
         const parcelsResponse = await fetch(
-          "http://192.168.31.124:8000/parcels",
+          `${process.env.NEXT_PUBLIC_API_URL}/parcels`,
           {
             headers: {
               Authorization: `Bearer ${token}`,
@@ -173,7 +173,7 @@ export function MerchantDashboard() {
         // Fetch pickup requests from backend (if endpoint exists)
         try {
           const pickupResponse = await fetch(
-            "http://192.168.31.124:8000/pickup-requests",
+            `${process.env.NEXT_PUBLIC_API_URL}/pickup-requests`,
             {
               headers: {
                 Authorization: `Bearer ${token}`,
@@ -231,7 +231,7 @@ export function MerchantDashboard() {
         }
 
         const parcelsResponse = await fetch(
-          "http://192.168.31.124:8000/parcels",
+          `${process.env.NEXT_PUBLIC_API_URL}/parcels`,
           {
             headers: {
               Authorization: `Bearer ${token}`,

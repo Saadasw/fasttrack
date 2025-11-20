@@ -6,7 +6,7 @@ class ApiClient {
 
   constructor(
     baseUrl: string = process.env.NEXT_PUBLIC_API_URL ||
-      "http://192.168.31.78:8000"
+      "http://localhost:8000"
   ) {
     this.baseUrl = baseUrl;
     // Only access localStorage in browser environment

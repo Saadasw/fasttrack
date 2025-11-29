@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useParams } from 'next/navigation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -43,9 +43,15 @@ export default function TrackingPage() {
     setTrackingResult(null)
 
     try {
-      const response = await fetch(`/api/track/${trackingId}`)
+      // Call backend directly from browser (client-side)
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+      const response = await fetch(`${apiUrl}/parcels/tracking/${trackingId}`)
+      
       if (!response.ok) {
-        throw new Error('Parcel not found')
+        if (response.status === 404) {
+          throw new Error('Parcel not found')
+        }
+        throw new Error('Failed to track parcel')
       }
       
       const data = await response.json()
@@ -70,6 +76,13 @@ export default function TrackingPage() {
   const getStatusConfig = (status: string) => {
     return statusConfig[status as keyof typeof statusConfig] || statusConfig.pending
   }
+
+  // Auto-track when page loads with tracking ID in URL
+  useEffect(() => {
+    if (trackingId && trackingId.trim()) {
+      handleTrack()
+    }
+  }, []) // Empty dependency array means run once on mount
 
   return (
     <div className="container mx-auto px-4 py-8">

@@ -34,6 +34,7 @@ import { Label } from '@/components/ui/label'
 import { PickupRequestManagement } from './pickup-request-management'
 import { UserManagement } from './user-management'
 import { CourierManagement } from './courier-management'
+import { ParcelManagement } from './parcel-management'
 
 interface DashboardStats {
   total_merchants: number
@@ -183,8 +184,9 @@ export function AdminDashboard() {
       </div>
 
       <Tabs value={selectedTab} onValueChange={setSelectedTab} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="parcels">Parcels</TabsTrigger>
           <TabsTrigger value="pickup-requests">Pickup Requests</TabsTrigger>
           <TabsTrigger value="users">Users</TabsTrigger>
           <TabsTrigger value="couriers">Couriers</TabsTrigger>
@@ -313,6 +315,11 @@ export function AdminDashboard() {
       </div>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* Parcels Tab */}
+        <TabsContent value="parcels" className="space-y-6">
+          <ParcelManagement />
         </TabsContent>
 
         {/* Pickup Requests Tab */}

@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
@@ -17,52 +18,47 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Parcel } from "@/lib/supabase"; // Import the global Parcel type
-// Direct API calls for now'
 import {
   Package,
   Search,
   Filter,
-  Plus,
   Eye,
-  Edit,
-  Trash2,
   Truck,
-  CheckCircle,
   Clock,
+  CheckCircle,
   AlertCircle,
   MapPin,
   User,
   Phone,
-  ShoppingCart,
+  Plus,
 } from "lucide-react";
-import { PickupRequestForm } from "./pickup-request-form";
+import { TrackingUpdateForm } from "./tracking-update-form";
+import { TrackingTimeline } from "./tracking-timeline";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 interface Parcel {
   id: string;
   tracking_id: string;
   recipient_name: string;
   recipient_phone: string;
-  recipient_address?: string; // Legacy field
-  origin_address?: string; // New field from backend
-  destination_address?: string; // New field from backend
+  origin_address?: string;
+  destination_address?: string;
   package_description?: string;
   weight?: number;
   dimensions?: string;
   status: string;
   created_at: string;
   updated_at: string;
+  sender_id: string;
 }
 
-interface ParcelListProps {
-  onViewParcel?: (parcel: Parcel) => void;
-  onEditParcel?: (parcel: Parcel) => void;
-  onCreateParcel?: () => void;
-}
-
-const statusConfig = {
+const statusConfig: Record<string, any> = {
   pending: {
     label: "Pending",
     color: "bg-yellow-100 text-yellow-800",
@@ -71,12 +67,12 @@ const statusConfig = {
   assigned: {
     label: "Assigned",
     color: "bg-blue-100 text-blue-800",
-    icon: Truck,
+    icon: User,
   },
   picked_up: {
     label: "Picked Up",
     color: "bg-purple-100 text-purple-800",
-    icon: Truck,
+    icon: Package,
   },
   in_transit: {
     label: "In Transit",
@@ -95,19 +91,15 @@ const statusConfig = {
   },
 };
 
-export function ParcelList({
-  onViewParcel,
-  onEditParcel,
-  onCreateParcel,
-}: ParcelListProps) {
+export function ParcelManagement() {
   const [parcels, setParcels] = useState<Parcel[]>([]);
   const [filteredParcels, setFilteredParcels] = useState<Parcel[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [showPickupForm, setShowPickupForm] = useState(false);
-  const [selectedParcelForPickup, setSelectedParcelForPickup] =
-    useState<Parcel | null>(null);
+  const [selectedParcel, setSelectedParcel] = useState<Parcel | null>(null);
+  const [showUpdateForm, setShowUpdateForm] = useState(false);
+  const [showTimeline, setShowTimeline] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -124,10 +116,10 @@ export function ParcelList({
 
       const token = localStorage.getItem("token");
       if (!token) {
-        throw new Error("Not authenticated. Please login again.");
+        throw new Error("Not authenticated");
       }
 
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
       const response = await fetch(`${apiUrl}/parcels`, {
         headers: {
           Authorization: `Bearer ${token}`,
@@ -136,8 +128,7 @@ export function ParcelList({
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || "Failed to load parcels");
+        throw new Error("Failed to load parcels");
       }
 
       const data = await response.json();
@@ -156,92 +147,36 @@ export function ParcelList({
   const filterParcels = () => {
     let filtered = parcels;
 
-    // Filter by status
     if (statusFilter !== "all") {
       filtered = filtered.filter((parcel) => parcel.status === statusFilter);
     }
 
-    // Filter by search term
     if (searchTerm) {
       filtered = filtered.filter(
         (parcel) =>
           parcel.tracking_id.toLowerCase().includes(searchTerm.toLowerCase()) ||
           parcel.recipient_name
             .toLowerCase()
-            .includes(searchTerm.toLowerCase()) ||
-          parcel.recipient_address
-            .toLowerCase()
-            .includes(searchTerm.toLowerCase()) ||
-          (parcel.package_description &&
-            parcel.package_description
-              .toLowerCase()
-              .includes(searchTerm.toLowerCase()))
+            .includes(searchTerm.toLowerCase())
       );
     }
 
     setFilteredParcels(filtered);
   };
 
-  const handleDeleteParcel = async (parcelId: string) => {
-    if (
-      !confirm(
-        "Are you sure you want to delete this parcel? This action cannot be undone."
-      )
-    ) {
-      return;
-    }
-
-    try {
-      const token = localStorage.getItem("token");
-      if (!token) {
-        throw new Error("Not authenticated. Please login again.");
-      }
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-      const response = await fetch(
-        `${apiUrl}/parcels/${parcelId}`,
-        {
-          method: "DELETE",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-        }
-      );
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || "Failed to delete parcel");
-      }
-
-      toast({
-        title: "Success",
-        description: "Parcel deleted successfully",
-        variant: "default",
-      });
-      loadParcels(); // Reload the list
-    } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to delete parcel",
-        variant: "destructive",
-      });
-    }
+  const handleAddUpdate = (parcel: Parcel) => {
+    setSelectedParcel(parcel);
+    setShowUpdateForm(true);
   };
 
-  const handleCreatePickupRequest = (parcel: Parcel) => {
-    setSelectedParcelForPickup(parcel);
-    setShowPickupForm(true);
+  const handleViewTimeline = (parcel: Parcel) => {
+    setSelectedParcel(parcel);
+    setShowTimeline(true);
   };
 
-  const handlePickupRequestSuccess = () => {
-    setShowPickupForm(false);
-    setSelectedParcelForPickup(null);
-    loadParcels(); // Reload the list
-  };
-
-  const handleClosePickupForm = () => {
-    setShowPickupForm(false);
-    setSelectedParcelForPickup(null);
+  const handleUpdateSuccess = () => {
+    loadParcels();
+    setShowUpdateForm(false);
   };
 
   const formatDate = (dateString: string) => {
@@ -255,9 +190,7 @@ export function ParcelList({
   };
 
   const getStatusConfig = (status: string) => {
-    return (
-      statusConfig[status as keyof typeof statusConfig] || statusConfig.pending
-    );
+    return statusConfig[status] || statusConfig.pending;
   };
 
   if (isLoading) {
@@ -281,55 +214,43 @@ export function ParcelList({
             <div>
               <CardTitle className="flex items-center gap-2">
                 <Package className="h-5 w-5" />
-                Parcels ({filteredParcels.length})
+                Parcel Management ({filteredParcels.length})
               </CardTitle>
               <CardDescription>
-                Manage and track all your parcels
+                View and manage all parcels, add tracking updates
               </CardDescription>
             </div>
-
-            {onCreateParcel && (
-              <Button
-                onClick={onCreateParcel}
-                className="flex items-center gap-2 bg-blue-600 text-white hover:bg-blue-700"
-              >
-                <Plus className="h-4 w-4" />
-                Create Parcel
-              </Button>
-            )}
           </div>
         </CardHeader>
 
         <CardContent>
-          {/* Filters and Search */}
+          {/* Filters */}
           <div className="flex flex-col sm:flex-row gap-4 mb-6">
             <div className="flex-1 relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
               <Input
-                placeholder="Search by tracking ID, recipient, or description..."
+                placeholder="Search by tracking ID or recipient..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-10"
               />
             </div>
 
-            <div className="flex gap-2">
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-40">
-                  <Filter className="h-4 w-4 mr-2" />
-                  <SelectValue placeholder="Filter by status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Statuses</SelectItem>
-                  <SelectItem value="pending">Pending</SelectItem>
-                  <SelectItem value="assigned">Assigned</SelectItem>
-                  <SelectItem value="picked_up">Picked Up</SelectItem>
-                  <SelectItem value="in_transit">In Transit</SelectItem>
-                  <SelectItem value="delivered">Delivered</SelectItem>
-                  <SelectItem value="returned">Returned</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="w-full sm:w-48">
+                <Filter className="h-4 w-4 mr-2" />
+                <SelectValue placeholder="Filter by status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Statuses</SelectItem>
+                <SelectItem value="pending">Pending</SelectItem>
+                <SelectItem value="assigned">Assigned</SelectItem>
+                <SelectItem value="picked_up">Picked Up</SelectItem>
+                <SelectItem value="in_transit">In Transit</SelectItem>
+                <SelectItem value="delivered">Delivered</SelectItem>
+                <SelectItem value="returned">Returned</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
           {/* Parcels List */}
@@ -342,17 +263,8 @@ export function ParcelList({
               <p className="text-gray-500">
                 {searchTerm || statusFilter !== "all"
                   ? "Try adjusting your search or filters"
-                  : "Create your first parcel to get started"}
+                  : "No parcels in the system yet"}
               </p>
-              {!searchTerm && statusFilter === "all" && onCreateParcel && (
-                <Button
-                  onClick={onCreateParcel}
-                  className="mt-4 bg-blue-600 text-white hover:bg-blue-700"
-                >
-                  <Plus className="h-4 w-4 mr-2" />
-                  Create Parcel
-                </Button>
-              )}
             </div>
           ) : (
             <div className="space-y-4">
@@ -387,10 +299,12 @@ export function ParcelList({
                               <Phone className="h-4 w-4 inline mr-2" />
                               {parcel.recipient_phone}
                             </p>
-                            <p className="text-sm text-gray-600">
-                              <MapPin className="h-4 w-4 inline mr-2" />
-                              {parcel.recipient_address}
-                            </p>
+                            {parcel.destination_address && (
+                              <p className="text-sm text-gray-600">
+                                <MapPin className="h-4 w-4 inline mr-2" />
+                                {parcel.destination_address}
+                              </p>
+                            )}
                           </div>
 
                           <div>
@@ -423,48 +337,24 @@ export function ParcelList({
                         </div>
                       </div>
 
-                      <div className="flex gap-2 ml-4">
-                        {onViewParcel && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => onViewParcel(parcel)}
-                          >
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                        )}
-
-                        {parcel.status === "pending" && onEditParcel && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => onEditParcel(parcel)}
-                          >
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                        )}
-
-                        {parcel.status === "pending" && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleCreatePickupRequest(parcel)}
-                            className="text-blue-600 hover:text-blue-700"
-                          >
-                            <ShoppingCart className="h-4 w-4" />
-                          </Button>
-                        )}
-
-                        {parcel.status === "pending" && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleDeleteParcel(parcel.id)}
-                            className="text-red-600 hover:text-red-700"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        )}
+                      <div className="flex flex-col gap-2 ml-4">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleViewTimeline(parcel)}
+                          className="whitespace-nowrap"
+                        >
+                          <Eye className="h-4 w-4 mr-1" />
+                          View Timeline
+                        </Button>
+                        <Button
+                          size="sm"
+                          onClick={() => handleAddUpdate(parcel)}
+                          className="bg-blue-600 text-white hover:bg-blue-700 whitespace-nowrap"
+                        >
+                          <Plus className="h-4 w-4 mr-1" />
+                          Add Update
+                        </Button>
                       </div>
                     </div>
                   </div>
@@ -474,14 +364,34 @@ export function ParcelList({
           )}
         </CardContent>
       </Card>
-      {/* Pickup Request Form Modal */}
-      {showPickupForm && selectedParcelForPickup && (
-        <PickupRequestForm
-          isOpen={showPickupForm}
-          onClose={handleClosePickupForm}
-          onSuccess={handlePickupRequestSuccess}
-          preselectedParcels={[selectedParcelForPickup.id]}
+
+      {/* Tracking Update Form Dialog */}
+      {selectedParcel && (
+        <TrackingUpdateForm
+          parcelId={selectedParcel.id}
+          trackingId={selectedParcel.tracking_id}
+          currentStatus={selectedParcel.status}
+          isOpen={showUpdateForm}
+          onClose={() => setShowUpdateForm(false)}
+          onSuccess={handleUpdateSuccess}
         />
+      )}
+
+      {/* Timeline Dialog */}
+      {selectedParcel && (
+        <Dialog open={showTimeline} onOpenChange={setShowTimeline}>
+          <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>
+                Tracking Timeline - {selectedParcel.tracking_id}
+              </DialogTitle>
+            </DialogHeader>
+            <TrackingTimeline
+              trackingId={selectedParcel.tracking_id}
+              parcelId={selectedParcel.id}
+            />
+          </DialogContent>
+        </Dialog>
       )}
     </>
   );

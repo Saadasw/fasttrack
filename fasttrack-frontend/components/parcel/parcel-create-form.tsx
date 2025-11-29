@@ -98,9 +98,9 @@ export function ParcelCreateForm({
         throw new Error("Not authenticated. Please login again.");
       }
       
-      const response = await fetch('http://192.168.31.124:8000/parcels', {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+      const response = await fetch(`${apiUrl}/parcels`, {
         method: 'POST',
-
         headers: {
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",

@@ -11,9 +11,12 @@ export function TrackingSection() {
   const [isTracking, setIsTracking] = useState(false)
 
   const handleTrack = () => {
-    setIsTracking(true)
-    // Simulate tracking delay
-    setTimeout(() => setIsTracking(false), 2000)
+    if (!trackingId.trim()) {
+      alert('Please enter a tracking ID')
+      return
+    }
+    // Redirect to tracking page
+    window.location.href = `/tracking/${trackingId.trim()}`
   }
 
   const trackingSteps = [
@@ -43,47 +46,37 @@ export function TrackingSection() {
                   onChange={(e) => setTrackingId(e.target.value)}
                   className="flex-1"
                 />
-                <Button onClick={handleTrack} disabled={isTracking}>
+                <Button onClick={handleTrack} disabled={!trackingId.trim()}>
                   <Search className="h-4 w-4 mr-2" />
-                  {isTracking ? "Tracking..." : "Track"}
+                  Track
                 </Button>
               </div>
             </CardContent>
           </Card>
 
-          {trackingId && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Delivery Status - {trackingId}</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-6">
-                  {trackingSteps.map((step, index) => (
-                    <div key={index} className="flex items-center gap-4">
-                      <div
-                        className={`p-3 rounded-full ${
-                          step.completed ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
-                        } ${step.active ? "delivery-pulse" : ""}`}
-                      >
-                        <step.icon className="h-6 w-6" />
-                      </div>
-                      <div className="flex-1">
-                        <div
-                          className={`font-semibold ${step.completed ? "text-foreground" : "text-muted-foreground"}`}
-                        >
-                          {step.label}
-                        </div>
-                        {step.active && <div className="text-sm text-primary">Currently in progress</div>}
-                      </div>
-                      {index < trackingSteps.length - 1 && (
-                        <div className={`w-px h-8 ${step.completed ? "bg-primary" : "bg-border"}`} />
-                      )}
-                    </div>
-                  ))}
+          <Card className="bg-blue-50 border-blue-200">
+            <CardContent className="pt-6">
+              <div className="text-center">
+                <Package className="h-12 w-12 text-blue-600 mx-auto mb-4" />
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                  Track Your Parcel Anytime
+                </h3>
+                <p className="text-gray-600 mb-4">
+                  No login required! Just enter your tracking ID to see real-time updates on your delivery.
+                </p>
+                <div className="flex gap-3 justify-center text-sm text-gray-600">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle className="h-4 w-4 text-green-600" />
+                    <span>Real-time updates</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <CheckCircle className="h-4 w-4 text-green-600" />
+                    <span>No login needed</span>
+                  </div>
                 </div>
-              </CardContent>
-            </Card>
-          )}
+              </div>
+            </CardContent>
+          </Card>
         </div>
       </div>
     </section>

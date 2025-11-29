@@ -11,6 +11,7 @@ import time
 from pydantic import BaseModel
 import httpx
 import uuid
+from email_service import send_status_change_email, send_parcel_created_email
 
 # Load environment variables with override to ensure fresh values
 load_dotenv(override=True)
@@ -157,6 +158,21 @@ class PickupRequestUpdate(BaseModel):
 
 class PickupRequestReject(BaseModel):
     admin_notes: str
+
+# Tracking Update Models
+class TrackingUpdateCreate(BaseModel):
+    status: str
+    location: Optional[str] = None
+    notes: Optional[str] = None
+
+class TrackingUpdateResponse(BaseModel):
+    id: str
+    parcel_id: str
+    status: str
+    location: Optional[str]
+    timestamp: str
+    notes: Optional[str]
+    updated_by: Optional[str]
 
 # Admin authentication helper
 # Authentication functions
@@ -405,12 +421,40 @@ async def create_parcel(
         result = await supabase_request(
             "parcels",
             "POST",
-            filtered_data
+            filtered_data,
+            headers={"Prefer": "return=representation"}
         )
         
-        # Generate a UUID for the response since Supabase POST returns empty body
-        import uuid
-        parcel_id = str(uuid.uuid4())
+        # Get the actual parcel ID from the database response
+        if result and isinstance(result, list) and len(result) > 0:
+            parcel_id = result[0].get("id")
+            # Update filtered_data with actual database values
+            filtered_data.update(result[0])
+        else:
+            # Fallback: generate UUID (shouldn't happen with Prefer header)
+            import uuid
+            parcel_id = str(uuid.uuid4())
+        
+        # Send email notification to merchant
+        try:
+            # Get merchant details
+            merchant = await supabase_request(
+                f"profiles?id=eq.{user_id}",
+                "GET"
+            )
+            
+            if merchant and len(merchant) > 0:
+                merchant_data = merchant[0]
+                send_parcel_created_email(
+                    merchant_email=merchant_data.get("email"),
+                    merchant_name=merchant_data.get("full_name", "Merchant"),
+                    tracking_id=tracking_id,
+                    recipient_name=filtered_data.get("recipient_name"),
+                    recipient_address=filtered_data.get("destination_address", "N/A")
+                )
+        except Exception as email_error:
+            # Don't fail the request if email fails
+            print(f"Failed to send email notification: {str(email_error)}")
         
         return {**filtered_data, "id": parcel_id}
         
@@ -597,6 +641,29 @@ async def update_parcel_status(
         if not result:
             raise HTTPException(status_code=500, detail="Failed to update parcel status")
         
+        # Send email notification to merchant
+        try:
+            # Get merchant details
+            merchant = await supabase_request(
+                f"profiles?id=eq.{parcel.get('sender_id')}",
+                "GET"
+            )
+            
+            if merchant and len(merchant) > 0:
+                merchant_data = merchant[0]
+                send_status_change_email(
+                    merchant_email=merchant_data.get("email"),
+                    merchant_name=merchant_data.get("full_name", "Merchant"),
+                    tracking_id=parcel.get("tracking_id"),
+                    old_status=parcel.get("status"),
+                    new_status=new_status,
+                    recipient_name=parcel.get("recipient_name"),
+                    notes=notes if notes else None
+                )
+        except Exception as email_error:
+            # Don't fail the request if email fails
+            print(f"Failed to send email notification: {str(email_error)}")
+        
         return {"message": f"Parcel status updated to {new_status}"}
         
     except Exception as e:
@@ -654,6 +721,7 @@ async def create_pickup_request(
             "pickup_requests",
             "POST",
             pickup_data,
+            headers={"Prefer": "return=representation"},
             user_token=user_token
         )
         
@@ -1339,6 +1407,159 @@ async def assign_parcel_to_courier(
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+# ================ TRACKING UPDATES ENDPOINTS ================
+
+@app.post("/parcels/{parcel_id}/tracking-updates", response_model=TrackingUpdateResponse)
+async def create_tracking_update(
+    parcel_id: str,
+    update_data: TrackingUpdateCreate,
+    token: dict = Depends(verify_token)
+):
+    """Create a tracking update for a parcel (admin only)"""
+    try:
+        user_id = token.get("sub")
+        user_role = token.get("role")
+        
+        # Only admins can create tracking updates
+        if user_role != "admin":
+            raise HTTPException(
+                status_code=403,
+                detail="Only admins can create tracking updates"
+            )
+        
+        # Check if parcel exists
+        parcel = await supabase_request(
+            f"parcels?id=eq.{parcel_id}",
+            "GET"
+        )
+        
+        if not parcel or len(parcel) == 0:
+            raise HTTPException(status_code=404, detail="Parcel not found")
+        
+        # Create tracking update
+        tracking_data = {
+            "parcel_id": parcel_id,
+            "status": update_data.status,
+            "location": update_data.location,
+            "notes": update_data.notes,
+            "updated_by": user_id,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        
+        result = await supabase_request(
+            "tracking_updates",
+            "POST",
+            tracking_data,
+            headers={"Prefer": "return=representation"}
+        )
+        
+        # Get the actual ID from response
+        if result and isinstance(result, list) and len(result) > 0:
+            tracking_id = result[0].get("id")
+            tracking_data.update(result[0])
+        else:
+            tracking_id = str(uuid.uuid4())
+        
+        # Also update the parcel's main status
+        await supabase_request(
+            f"parcels?id=eq.{parcel_id}",
+            "PATCH",
+            {
+                "status": update_data.status,
+                "updated_at": datetime.utcnow().isoformat()
+            }
+        )
+        
+        # Send email notification
+        try:
+            parcel_data = parcel[0]
+            merchant = await supabase_request(
+                f"profiles?id=eq.{parcel_data.get('sender_id')}",
+                "GET"
+            )
+            
+            if merchant and len(merchant) > 0:
+                merchant_data = merchant[0]
+                send_status_change_email(
+                    merchant_email=merchant_data.get("email"),
+                    merchant_name=merchant_data.get("full_name", "Merchant"),
+                    tracking_id=parcel_data.get("tracking_id"),
+                    old_status=parcel_data.get("status"),
+                    new_status=update_data.status,
+                    recipient_name=parcel_data.get("recipient_name"),
+                    notes=update_data.notes
+                )
+        except Exception as email_error:
+            print(f"Failed to send email notification: {str(email_error)}")
+        
+        return {
+            "id": tracking_id,
+            "parcel_id": parcel_id,
+            "status": update_data.status,
+            "location": update_data.location,
+            "timestamp": tracking_data["timestamp"],
+            "notes": update_data.notes,
+            "updated_by": user_id
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/parcels/{parcel_id}/tracking-updates", response_model=List[TrackingUpdateResponse])
+async def get_tracking_updates(
+    parcel_id: str
+):
+    """Get all tracking updates for a parcel (public endpoint)"""
+    try:
+        # Check if parcel exists
+        parcel = await supabase_request(
+            f"parcels?id=eq.{parcel_id}",
+            "GET"
+        )
+        
+        if not parcel or len(parcel) == 0:
+            raise HTTPException(status_code=404, detail="Parcel not found")
+        
+        # Get tracking updates ordered by timestamp
+        updates = await supabase_request(
+            f"tracking_updates?parcel_id=eq.{parcel_id}&order=timestamp.asc",
+            "GET"
+        )
+        
+        return updates or []
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/parcels/tracking/{tracking_id}/updates")
+async def get_tracking_updates_by_tracking_id(
+    tracking_id: str
+):
+    """Get all tracking updates by tracking ID (public endpoint)"""
+    try:
+        # Get parcel by tracking ID
+        parcel = await supabase_request(
+            f"parcels?tracking_id=eq.{tracking_id}",
+            "GET"
+        )
+        
+        if not parcel or len(parcel) == 0:
+            raise HTTPException(status_code=404, detail="Parcel not found")
+        
+        parcel_id = parcel[0].get("id")
+        
+        # Get tracking updates
+        updates = await supabase_request(
+            f"tracking_updates?parcel_id=eq.{parcel_id}&order=timestamp.asc",
+            "GET"
+        )
+        
+        return updates or []
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/parcels/status/{status}")
 async def get_parcels_by_status(
     status: str,

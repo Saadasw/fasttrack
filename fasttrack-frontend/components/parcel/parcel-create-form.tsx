@@ -44,6 +44,11 @@ const parcelSchema = z.object({
   recipient_address: z
     .string()
     .min(10, "Address must be at least 10 characters"),
+  customer_email: z
+    .string()
+    .email("Invalid email address")
+    .optional()
+    .or(z.literal("")),
   package_description: z.string().optional(),
   weight: z.number().min(0.1, "Weight must be greater than 0"),
   dimensions: z.string().min(5, "Dimensions must be at least 5 characters"),
@@ -218,6 +223,25 @@ export function ParcelCreateForm({
               {errors.recipient_address && (
                 <p className="text-sm text-red-500">
                   {errors.recipient_address.message}
+                </p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="customer_email">Customer Email (Optional)</Label>
+              <Input
+                id="customer_email"
+                type="email"
+                {...register("customer_email")}
+                placeholder="customer@example.com"
+                className={errors.customer_email ? "border-red-500" : ""}
+              />
+              <p className="text-xs text-gray-500">
+                Customer will receive tracking updates via email
+              </p>
+              {errors.customer_email && (
+                <p className="text-sm text-red-500">
+                  {errors.customer_email.message}
                 </p>
               )}
             </div>

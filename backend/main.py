@@ -12,6 +12,7 @@ from pydantic import BaseModel
 import httpx
 import uuid
 from email_service import send_status_change_email, send_parcel_created_email
+from customer_emails import save_customer_email, get_customer_email
 
 # Load environment variables with override to ensure fresh values
 load_dotenv(override=True)
@@ -72,6 +73,7 @@ class ParcelCreate(BaseModel):
     recipient_name: str
     recipient_phone: str
     recipient_address: str  # For backward compatibility
+    customer_email: Optional[str] = None  # Customer email for notifications
     package_description: Optional[str] = None
     weight: Optional[float] = None
     dimensions: Optional[str] = None
@@ -400,6 +402,9 @@ async def create_parcel(
             parcel_data_dict["origin_address"] = parcel_data_dict.pop("recipient_address")
             parcel_data_dict["destination_address"] = parcel_data_dict["origin_address"]
         
+        # Store customer email temporarily (will save to CSV after getting real tracking_id)
+        customer_email = parcel_data_dict.get("customer_email")
+        
         # Filter out fields that don't exist in the database
         allowed_fields = {
             "recipient_name", "recipient_phone", "origin_address", "destination_address",
@@ -407,7 +412,7 @@ async def create_parcel(
             "status", "created_at", "updated_at"
         }
         
-        # Remove fields that don't exist in the database
+        # Remove fields that don't exist in the database (including customer_email)
         filtered_data = {k: v for k, v in parcel_data_dict.items() if k in allowed_fields}
         
         filtered_data.update({
@@ -430,10 +435,22 @@ async def create_parcel(
             parcel_id = result[0].get("id")
             # Update filtered_data with actual database values
             filtered_data.update(result[0])
+            # Get the REAL tracking_id from database (might be different due to trigger)
+            actual_tracking_id = result[0].get("tracking_id")
         else:
             # Fallback: generate UUID (shouldn't happen with Prefer header)
             import uuid
             parcel_id = str(uuid.uuid4())
+            actual_tracking_id = tracking_id
+        
+        # NOW save customer email to CSV with the ACTUAL tracking_id from database
+        if customer_email:
+            save_customer_email(
+                tracking_id=actual_tracking_id,
+                customer_email=customer_email,
+                recipient_name=filtered_data.get("recipient_name", "")
+            )
+            print(f"✅ Saved customer email for tracking_id: {actual_tracking_id}")
         
         # Send email notification to merchant
         try:
@@ -448,7 +465,7 @@ async def create_parcel(
                 send_parcel_created_email(
                     merchant_email=merchant_data.get("email"),
                     merchant_name=merchant_data.get("full_name", "Merchant"),
-                    tracking_id=tracking_id,
+                    tracking_id=actual_tracking_id,
                     recipient_name=filtered_data.get("recipient_name"),
                     recipient_address=filtered_data.get("destination_address", "N/A")
                 )
@@ -641,7 +658,7 @@ async def update_parcel_status(
         if not result:
             raise HTTPException(status_code=500, detail="Failed to update parcel status")
         
-        # Send email notification to merchant
+        # Send email notifications to merchant AND customer
         try:
             # Get merchant details
             merchant = await supabase_request(
@@ -649,6 +666,7 @@ async def update_parcel_status(
                 "GET"
             )
             
+            # Send to merchant
             if merchant and len(merchant) > 0:
                 merchant_data = merchant[0]
                 send_status_change_email(
@@ -660,6 +678,26 @@ async def update_parcel_status(
                     recipient_name=parcel.get("recipient_name"),
                     notes=notes if notes else None
                 )
+            
+            # Send to customer if email exists in CSV
+            tracking_id_for_lookup = parcel.get("tracking_id")
+            print(f"🔍 Looking up customer email for tracking ID: {tracking_id_for_lookup}")
+            customer_email = get_customer_email(tracking_id_for_lookup)
+            print(f"📧 Customer email found: {customer_email}")
+            
+            if customer_email:
+                print(f"✉️ Sending status update to customer: {customer_email}")
+                send_status_change_email(
+                    merchant_email=customer_email,
+                    merchant_name=parcel.get("recipient_name", "Customer"),
+                    tracking_id=parcel.get("tracking_id"),
+                    old_status=parcel.get("status"),
+                    new_status=new_status,
+                    recipient_name=parcel.get("recipient_name"),
+                    notes=notes if notes else None
+                )
+            else:
+                print(f"⚠️ No customer email found for tracking ID: {tracking_id_for_lookup}")
         except Exception as email_error:
             # Don't fail the request if email fails
             print(f"Failed to send email notification: {str(email_error)}")
@@ -1471,9 +1509,11 @@ async def create_tracking_update(
             }
         )
         
-        # Send email notification
+        # Send email notifications to merchant AND customer
         try:
             parcel_data = parcel[0]
+            
+            # Send to merchant
             merchant = await supabase_request(
                 f"profiles?id=eq.{parcel_data.get('sender_id')}",
                 "GET"
@@ -1490,6 +1530,27 @@ async def create_tracking_update(
                     recipient_name=parcel_data.get("recipient_name"),
                     notes=update_data.notes
                 )
+            
+            # Send to customer if email exists in CSV
+            tracking_id_for_lookup = parcel_data.get("tracking_id")
+            print(f"🔍 Looking up customer email for tracking ID: {tracking_id_for_lookup}")
+            customer_email = get_customer_email(tracking_id_for_lookup)
+            print(f"📧 Customer email found: {customer_email}")
+            
+            if customer_email:
+                print(f"✉️ Sending status update to customer: {customer_email}")
+                send_status_change_email(
+                    merchant_email=customer_email,
+                    merchant_name=parcel_data.get("recipient_name", "Customer"),
+                    tracking_id=tracking_id_for_lookup,
+                    old_status=parcel_data.get("status"),
+                    new_status=update_data.status,
+                    recipient_name=parcel_data.get("recipient_name"),
+                    notes=update_data.notes
+                )
+                print(f"✅ Customer email sent successfully to {customer_email}")
+            else:
+                print(f"⚠️ No customer email found for tracking ID: {tracking_id_for_lookup}")
         except Exception as email_error:
             print(f"Failed to send email notification: {str(email_error)}")
         

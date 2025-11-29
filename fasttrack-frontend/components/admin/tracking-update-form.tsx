@@ -35,7 +35,6 @@ import { MapPin, FileText, Truck } from "lucide-react";
 const trackingUpdateSchema = z.object({
   status: z.enum([
     "pending",
-    "assigned",
     "picked_up",
     "in_transit",
     "delivered",
@@ -59,7 +58,6 @@ interface TrackingUpdateFormProps {
 
 const statusOptions = [
   { value: "pending", label: "Pending", color: "text-yellow-600" },
-  { value: "assigned", label: "Assigned to Courier", color: "text-blue-600" },
   { value: "picked_up", label: "Picked Up", color: "text-purple-600" },
   { value: "in_transit", label: "In Transit", color: "text-indigo-600" },
   { value: "delivered", label: "Delivered", color: "text-green-600" },
